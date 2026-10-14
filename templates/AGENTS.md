@@ -27,7 +27,8 @@ Read [`WORKING_AGREEMENTS.md`](WORKING_AGREEMENTS.md). The short version:
   tests at the right layer, with independent expected values).
 - **Before pushing:** `pre-push-review` (self-review against
   [`docs/standards/STANDARDS.md`](docs/standards/STANDARDS.md), then the local gates). It calls
-  `updating-the-changelog`, `docs-sync-review` and `mobile-responsive-review` where they apply.
+  `updating-the-changelog`, `announcing-a-feature`, `docs-sync-review` and
+  `mobile-responsive-review` where they apply.
 - **After a design-system merge:** `landing-a-design-system-change`. A merge is not delivery.
 
 ## Configuration the skills read
@@ -40,7 +41,8 @@ Read [`WORKING_AGREEMENTS.md`](WORKING_AGREEMENTS.md). The short version:
 | Unit tests | `npm test` |
 | Integration tests | `npm run test:integration` (needs `npm run dev`) |
 | Component a11y tests | `npm run test:storybook` |
-| Changelog | `CHANGELOG.md` |
+| Changelog | `CHANGELOG.md` (or a folder, one file per entry) |
+| Feature announcements | <!-- e.g. lib/feature-announcements/entries.ts, 45-day window --> |
 | In-app docs map | `docs/docs-map.md` |
 | Product truth for PRDs | <!-- e.g. docs/prd/_features.md --> |
 | Exemplar component | <!-- e.g. src/ui/button.tsx --> |

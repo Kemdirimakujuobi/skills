@@ -18,8 +18,9 @@ Written later, it never gets written.
 
 ## Configure for your repo
 
-- **Changelog location** — `AGENTS.md` declares it (a Markdown file, or a data file a page renders).
-  Default: `CHANGELOG.md` at the repo root, newest entry at the top.
+- **Changelog location** — `AGENTS.md` declares it: a folder with one file per entry (preferred,
+  e.g. `changelog/entries/`), a data file a page renders, or a single Markdown file. Default:
+  `CHANGELOG.md` at the repo root, newest entry at the top.
 - **Entry shape** — follow whatever the existing entries use. If starting fresh, use the fields in
   Step 2: date, kind, title, body, PR numbers.
 - **Product name and UI names** — use the names customers see, as the product context or UI states.
@@ -51,7 +52,27 @@ changelog?** If no, it's `none`.
 
 ## Step 2 — Write the entry
 
-Add one entry to the **top** of the changelog (newest first). In a data file it looks like:
+**Prefer one file per entry.** When every PR edits the top of the same file, every pair of parallel
+PRs conflicts on the same lines. With agents opening several PRs a day, a single changelog file
+becomes the repo's merge-conflict hotspot. If the repo keeps a folder of entries, adding an entry is
+adding a file, `<entries>/<YYYY-MM-DD>-<slug>.md`, and nothing else is edited:
+
+```md
+---
+date: YYYY-MM-DD
+kind: new
+title: Sales imports from a new CRM
+prs: 123
+---
+
+Pick the CRM under Settings → Import sales to load its export, next to the existing ones.
+```
+
+Write values without quotes (a quote becomes part of the value). Order comes from the date, so
+never renumber or edit other entries to make room. Validate the folder at build time, so a file
+with a missing or unknown field fails the build instead of rendering blank.
+
+If the repo keeps a single data file instead, add one entry to the **top** (newest first):
 
 ```ts
 {

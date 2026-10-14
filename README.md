@@ -44,6 +44,7 @@ idea
          └─ testing-a-change
              └─ pre-push-review          runs preflight + unit + integration tests
                  ├─ updating-the-changelog
+                 ├─ announcing-a-feature
                  ├─ docs-sync-review
                  └─ mobile-responsive-review
                      └─ PR → CI (typecheck, lint, test, integration) + review bot → a human merges
@@ -68,9 +69,12 @@ idea
   never fail for setup. Ships with an example Playwright test.
 - **[pre-push-review](./skills/pre-push-review/SKILL.md)**: runs before every push. Greps the diff
   against the rulebook, runs two review passes, the local gates and the test suites, checks size
-  and evidence, then calls the three sub-reviews below where they apply.
+  and evidence, then calls the four sub-reviews below where they apply.
 - **[updating-the-changelog](./skills/updating-the-changelog/SKILL.md)**: every PR adds a
   customer-facing changelog entry or records `Changelog: none — <reason>`.
+- **[announcing-a-feature](./skills/announcing-a-feature/SKILL.md)**: decides, rarely, whether a
+  change earns an in-app "what's new" modal, writes it with a real graphic, prunes entries past
+  the retention window, or records `Feature modal: none — <reason>`.
 - **[docs-sync-review](./skills/docs-sync-review/SKILL.md)**: maps the diff to the help pages it
   makes wrong and drafts the fix in the same PR.
 - **[mobile-responsive-review](./skills/mobile-responsive-review/SKILL.md)**: scans added markup
@@ -97,6 +101,35 @@ idea
 - **[figma-build](./skills/figma-build/SKILL.md)**: the 1:1 round-trip. Build, render, measure,
   diff, fix, repeat until the measured difference is zero in every state and both themes. Ships
   with [MEASURE.md](./skills/figma-build/MEASURE.md).
+
+## Skills I pair with
+
+Other people's skills I use alongside these, installed from their own repos so they stay current.
+Usage is from my own Claude Code and Codex history.
+
+| Skill | From | What I use it for |
+|---|---|---|
+| `emil-design-eng` | [emilkowalski/skills](https://github.com/emilkowalski/skills) | The taste layer: UI polish, component design and the invisible details that make an interface feel right where the design file is silent. |
+| `apple-design` | [emilkowalski/skills](https://github.com/emilkowalski/skills) | Fluid, physical motion for the web: gestures, springs, sheets, interruptible transitions. |
+| `animate`, `animation-vocabulary` | [emilkowalski/skills](https://github.com/emilkowalski/skills) | Building an animation in the right order (should it animate at all, then purpose, curve, duration, exit), and finding the exact name for a motion I can only describe. |
+| `find-animation-opportunities`, `improve-animations`, `review-animations` | [emilkowalski/skills](https://github.com/emilkowalski/skills) | Read-only motion passes: where motion would help, a prioritised audit of existing motion, and a strict review where approval is earned. |
+| `baseline-ui`, `fixing-accessibility`, `fixing-metadata`, `fixing-motion-performance` | [ibelick/ui-skills](https://github.com/ibelick/ui-skills) | A baseline against generic AI-generated UI, plus focused fix passes. |
+| `web-design-guidelines` | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) | A review against Vercel's web interface guidelines. |
+| `agentation` | [benjitaylor/agentation](https://github.com/benjitaylor/agentation) | Pointing at the exact element in the running app when giving an agent visual feedback. |
+| `brainstorming`, `systematic-debugging` | [obra/superpowers](https://github.com/obra/superpowers) | Thinking a feature through before building, and debugging by hypothesis instead of guessing. |
+
+```bash
+npx skills@latest add emilkowalski/skills
+npx skills@latest add ibelick/ui-skills
+npx skills@latest add vercel-labs/agent-skills
+npx skills@latest add benjitaylor/agentation
+```
+
+Superpowers installs as a Claude Code plugin; see its README.
+
+The motion and taste skills sit alongside `building-components` and `figma-build`. The Figma skills
+make a build exact; Emil's make it feel right where the design file is silent, and motion is rarely
+fully specified in Figma.
 
 ## Templates
 

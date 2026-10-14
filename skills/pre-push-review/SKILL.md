@@ -83,6 +83,9 @@ command grep -n 'outline-none' <<<"$DIFF"
 command grep -nE '\? "[^"]*(text-|bg-|p[xy]?-|m[xy]?-|w-|hidden)|&& "' <<<"$DIFF"
 # HYG-05 — a secret literal instead of an env var (eyeball every hit):
 command grep -nEi '(api[_-]?key|secret|token|password)\s*[:=]\s*["'\''][A-Za-z0-9_\-]{12,}' <<<"$DIFF"
+# A fixed-height bar without shrink-0 collapses in a flex column (headers never collapse):
+command grep -nE '^\+.*className="[^"]*\bh-([0-9]+|\[[0-9.]+(px|rem)\])[ "][^"]*"' <<<"$DIFF" \
+  | command grep -v 'shrink-0' | command grep -E 'header|border-b|top-0|justify-between'
 ```
 
 If a rule is already a lint error, don't grep for it — the lint gate in Step 5 catches it.
@@ -138,6 +141,9 @@ applies, it is a blocker with one explicit escape hatch in the PR body. Declinin
   run it. It decides whether the change is customer-visible and writes the entry in this branch.
   PR body: `Changelog: added — "<title>"` or `Changelog: none — <reason>` (internal tooling,
   refactors, anything not live yet).
+- **Feature announcement** — if the product has an in-app "what's new" modal and
+  `announcing-a-feature` is installed, run it after the changelog decision. A modal is rare.
+  PR body: `Feature modal: added — "<title>"` or `Feature modal: none — <reason>`.
 - **Docs sync** — if the repo has in-app or user-facing docs and `docs-sync-review` is installed,
   run it whenever the diff changes what a user can see or do. It maps changed paths to the
   affected page and drafts the fix in this branch. PR body: the updated pages, or
@@ -196,7 +202,7 @@ human pulls the trigger.** Approval to push in one message does not carry to the
 - [ ] Light + dark before/after evidence for every visible state in the PR body, pairs proven
       different
 - [ ] Both review passes run; blockers fixed, WARNs triaged
-- [ ] Changelog / docs / mobile sub-steps run where they apply, or an explicit `none — <reason>`
+- [ ] Changelog / feature modal / docs / mobile sub-steps run where they apply, or an explicit `none — <reason>`
       line in the PR body for each
 - [ ] `npm run preflight` (or typecheck + lint + build) green
 - [ ] Unit tests green; integration and component tests green where the diff touches them, or

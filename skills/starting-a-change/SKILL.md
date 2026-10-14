@@ -154,6 +154,7 @@ From the retro and the standards, the recurring ones to design out from commit 1
 - [ ] Branched off an up-to-date base, not another feature branch — or the stack is declared
       with its retarget command
 - [ ] Known traps for this change type noted before the first commit
+- [ ] Test layer decided (`testing-a-change`); for a bug fix, the failing test comes first
 
 When the work is built and you are ready to push, `pre-push-review` is the matching exit gate —
 run it before `git push`.

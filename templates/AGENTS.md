@@ -23,6 +23,8 @@ Read [`WORKING_AGREEMENTS.md`](WORKING_AGREEMENTS.md). The short version:
 - **Writing a spec:** `authoring-a-prd`.
 - **Before branching:** `starting-a-change` (branch naming, fresh base, latest `RETRO.md` traps).
 - **Building UI:** `figma-import` → `building-components` → `figma-build`. Tokens: `design-tokens`.
+- **While building and before pushing:** `testing-a-change` (unit, integration and component
+  tests at the right layer, with independent expected values).
 - **Before pushing:** `pre-push-review` (self-review against
   [`docs/standards/STANDARDS.md`](docs/standards/STANDARDS.md), then the local gates). It calls
   `updating-the-changelog`, `docs-sync-review` and `mobile-responsive-review` where they apply.
@@ -35,6 +37,9 @@ Read [`WORKING_AGREEMENTS.md`](WORKING_AGREEMENTS.md). The short version:
 | Base branch | `main` |
 | Branch areas | `feat` `fix` `ui` `docs` `ci` `chore` |
 | Preflight | `npm run preflight` |
+| Unit tests | `npm test` |
+| Integration tests | `npm run test:integration` (needs `npm run dev`) |
+| Component a11y tests | `npm run test:storybook` |
 | Changelog | `CHANGELOG.md` |
 | In-app docs map | `docs/docs-map.md` |
 | Product truth for PRDs | <!-- e.g. docs/prd/_features.md --> |

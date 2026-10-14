@@ -1,0 +1,121 @@
+# CI — the deterministic gates. Pair with bug-bot.yml (the review gate).
+#
+# Required checks (set them in branch protection): typecheck, lint, test.
+# `integration` is informational: it drives the real app on this PR's preview deployment and must
+# never block a PR for setup reasons. Promote it to required once it has been stable for a while.
+#
+# Job `name:` values are the required-check contexts. Do not rename without updating protection.
+# Script names below are the defaults the skills expect; change them to match package.json.
+
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # A gate that can never pass is worse than no gate. With a large existing lint baseline,
+      # lint only the files this PR changes.
+      - name: Lint changed files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          files=$(git diff --name-only --diff-filter=ACMR "origin/$BASE_REF...HEAD" -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs')
+          if [ -z "$files" ]; then echo "No lintable files changed."; exit 0; fi
+          npx eslint --max-warnings 0 $files
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  integration:
+    name: integration
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      # Test THIS commit's preview, not a shared alias that may serve someone else's commit.
+      # Works with any host that reports GitHub deployment statuses (Vercel, Netlify, Render…).
+      - name: Resolve this PR's preview url
+        id: preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          FALLBACK_URL: ${{ vars.E2E_BASE_URL }}
+        run: |
+          set -uo pipefail
+          url=""
+          for attempt in $(seq 1 36); do
+            for id in $(gh api "repos/$REPO/deployments?sha=$HEAD_SHA&per_page=100" --jq '.[].id' 2>/dev/null); do
+              url=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=100" \
+                --jq '[.[] | select(.state == "success") | .environment_url | select(. != null and . != "")] | first // empty' 2>/dev/null)
+              [ -n "$url" ] && break
+            done
+            [ -n "$url" ] && break
+            sleep 10
+          done
+          if [ -z "$url" ] && [ -n "${FALLBACK_URL:-}" ]; then
+            url="$FALLBACK_URL"
+            echo "::warning::No preview for this commit; falling back to $url, which may not serve it."
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Integration tests
+        if: ${{ steps.preview.outputs.url != '' }}
+        run: npm run test:integration
+        env:
+          E2E_BASE_URL: ${{ steps.preview.outputs.url }}
+      - name: No preview url, nothing to test against
+        if: ${{ steps.preview.outputs.url == '' }}
+        run: echo "No preview deployment resolved for this commit. Informational job; passing."

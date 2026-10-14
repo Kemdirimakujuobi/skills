@@ -3,8 +3,9 @@ name: pre-push-review
 description: >-
   Run this BEFORE every `git push` or opening a PR — whenever the user says "push this", "open a
   PR", "ready to ship", "let's get this reviewed", or you are about to push a branch. It
-  self-reviews the diff against docs/standards/STANDARDS.md, runs the local gates, and makes the
-  PR body carry its evidence and its explicit opt-outs (changelog, docs, mobile). Reviewer
+  self-reviews the diff against docs/standards/STANDARDS.md, runs the local gates including unit
+  and integration tests, and makes the PR body carry its evidence and its explicit opt-outs
+  (tests, changelog, docs, mobile). Reviewer
   findings are knowable before you push; every one caught here is a review round you don't pay
   for. Skip it and the same dozen findings arrive one round at a time. Do not skip to `git push`.
 ---
@@ -33,7 +34,9 @@ this skill is the enforcement.
 - **`docs/standards/STANDARDS.md`** — the numbered rubric (CODE-, COMP-, DOCS-, HYG-). Missing?
   Use the rules named below in words.
 - **`npm run preflight`** — one command for every local gate. Missing? Run the repo's typecheck,
-  lint and build scripts (names read from `package.json`), plus tests if they are fast.
+  lint and build scripts (names read from `package.json`). Tests run separately in Step 5.
+- **Test commands** — unit, integration and component accessibility, as named in `AGENTS.md` or
+  `package.json`. See `testing-a-change`.
 - **`WORKING_AGREEMENTS.md`** — PR size, one concern per PR, decision files.
 - **Optional sibling skills**, each run only if installed and the repo has the thing it checks:
   `updating-the-changelog` (a public changelog), `docs-sync-review` (in-app or user-facing docs),
@@ -144,13 +147,24 @@ applies, it is a blocker with one explicit escape hatch in the PR body. Declinin
   laptop quietly undoes everyone else's mobile work. PR body: `Mobile: checked — <what adapts>`,
   `Mobile impact: none — <reason>`, or `Mobile: desktop-only — <reason>`.
 
-## Step 5 — Green gates
+## Step 5 — Green gates, then tests
 
 ```sh
-npm run preflight
+npm run preflight            # typecheck, lint, build
+npm test                     # unit (or test:unit) — always
+npm run test:integration     # or test:e2e — when the diff touches a user flow
+npm run test:storybook       # component accessibility — when the diff touches a component
 ```
 
-Missing? Run typecheck, lint and build from `package.json` in that order. All must be green.
+Missing preflight? Run typecheck, lint and build from `package.json` in that order. All must be
+green. Then run `testing-a-change` if it is installed: it checks each behaviour change has a test
+at the right layer, that expected values come from an independent source, and writes the `Tests:`
+line for the PR body (`Tests: none — <reason>` for a copy or token change).
+
+- **Integration tests need a fresh dev server on this branch.** A suite that can't reach one
+  should skip with the reason, not fail. If it skipped, say so; never report it as passed.
+- **A red test you didn't cause is still red.** Confirm it also fails on the base, name it in the
+  PR body, and leave it alone. Never delete, skip or loosen a test to get green.
 
 - **A gate that can never pass is worse than no gate.** If the whole-repo lint has a large
   pre-existing baseline, lint only the files your branch changed against the merge-base. Your diff
@@ -185,6 +199,8 @@ human pulls the trigger.** Approval to push in one message does not carry to the
 - [ ] Changelog / docs / mobile sub-steps run where they apply, or an explicit `none — <reason>`
       line in the PR body for each
 - [ ] `npm run preflight` (or typecheck + lint + build) green
+- [ ] Unit tests green; integration and component tests green where the diff touches them, or
+      stated as skipped with the reason; a `Tests:` line in the PR body
 - [ ] A decision file exists IN THIS PR for any decision the diff cites; a release note exists if
       a published package changed
 - [ ] Within HYG-01; one concern; PR title mirrors the branch; targets the base; not merged by you

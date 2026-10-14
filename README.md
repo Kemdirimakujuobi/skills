@@ -40,12 +40,13 @@ idea
      └─ starting-a-change
          ├─ figma-import
          ├─ building-components / design-tokens
-         └─ figma-build
-             └─ pre-push-review
+         ├─ figma-build
+         └─ testing-a-change
+             └─ pre-push-review          runs preflight + unit + integration tests
                  ├─ updating-the-changelog
                  ├─ docs-sync-review
                  └─ mobile-responsive-review
-                     └─ PR → CI + review bot → a human merges
+                     └─ PR → CI (typecheck, lint, test, integration) + review bot → a human merges
                          └─ landing-a-design-system-change
 ```
 
@@ -60,9 +61,14 @@ idea
 - **[starting-a-change](./skills/starting-a-change/SKILL.md)**: runs before any branch exists.
   Names it `<area>/<slug>`, cuts it from a fresh base, refuses to stack, and carries the latest
   retro's traps into the plan.
+- **[testing-a-change](./skills/testing-a-change/SKILL.md)**: picks the right layer for each
+  behaviour change (unit, parity, invariant, integration, component accessibility), takes expected
+  values from an independent source rather than the code under test, and runs unit and integration
+  suites before the push. Integration suites skip with a reason when their environment is missing,
+  never fail for setup. Ships with an example Playwright test.
 - **[pre-push-review](./skills/pre-push-review/SKILL.md)**: runs before every push. Greps the diff
-  against the rulebook, runs two review passes and the local gates, checks size and evidence, then
-  calls the three sub-reviews below where they apply.
+  against the rulebook, runs two review passes, the local gates and the test suites, checks size
+  and evidence, then calls the three sub-reviews below where they apply.
 - **[updating-the-changelog](./skills/updating-the-changelog/SKILL.md)**: every PR adds a
   customer-facing changelog entry or records `Changelog: none — <reason>`.
 - **[docs-sync-review](./skills/docs-sync-review/SKILL.md)**: maps the diff to the help pages it
@@ -101,6 +107,7 @@ idea
 | [`docs/standards/STANDARDS.md`](./templates/docs/standards/STANDARDS.md) | The numbered review rubric, with severity, enforcement tiers, suppressions, waivers and ratchets. |
 | [`RETRO.md`](./templates/RETRO.md) | The memory `starting-a-change` reads before every branch. |
 | [`docs/decisions/_template.md`](./templates/docs/decisions/_template.md) | One decision per file. |
+| [`.github/workflows/ci.yml`](./templates/.github/workflows/ci.yml) | Typecheck, lint on changed files and unit tests as required checks, plus integration tests against this PR's own preview deployment (informational). |
 | [`.github/workflows/bug-bot.yml`](./templates/.github/workflows/bug-bot.yml) + [`bug-bot-prompt.md`](./templates/.github/bug-bot-prompt.md) | A two-job Claude review gate: the model posts findings, a shell step computes the verdict, the rubric is read from the base branch, and it fails closed. |
 
 The story of how this setup grew, and what each piece has prevented, is in the release note on my

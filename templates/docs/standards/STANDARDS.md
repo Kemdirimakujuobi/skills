@@ -79,8 +79,13 @@ than no gate.
 
 | ID | Severity | Enforced | Rule |
 |---|---|---|---|
-| TEST-01 | SHOULD | evidence | A bug fix adds the test that would have caught it. |
+| TEST-01 | MUST | evidence | A bug fix adds the test that would have caught it, or the PR body says why no test fits. |
 | TEST-02 | MUST | bot | A test's expected value comes from an independent oracle (a fixture, real-world input, or a stated derivation), never a value captured from the code under test. |
+| TEST-03 | MUST | CI | Unit tests run on every PR as a required check. |
+| TEST-04 | SHOULD | evidence | A change to a user flow extends or adds an integration test that drives the rendered app. The suite skips with a reason when its environment is missing; it never fails for setup. |
+| TEST-05 | SHOULD | bot | A convention you want kept (a value that must match in two places, a rule over every table or seed) is enforced by a test that fails without it, not only by a doc. |
+| TEST-06 | MUST | bot | No test is deleted, skipped or loosened to get a PR green without a decision file. |
+| TEST-07 | MUST | evidence | The PR body carries a `Tests:` line: what was tested at which layer, or `none — <reason>`. |
 
 ## Hygiene
 

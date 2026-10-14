@@ -1,0 +1,156 @@
+# Bug Bot — Claude reviews every PR against docs/standards/STANDARDS.md + WORKING_AGREEMENTS.md.
+#
+# Setup: add the ANTHROPIC_API_KEY repo secret, install the Claude GitHub App, copy
+# .github/bug-bot-prompt.md, and make `bug-bot` (not `bug-bot-review`) a required check.
+#
+# Two jobs, by design:
+# - `bug-bot-review` (NOT a required check): runs Claude, posts inline comments, emits a
+#   JSON-schema-constrained structured verdict. May fail on infra without ambiguity.
+# - `bug-bot` (THE required check): thin, deterministic, always runs. Verdict is COMPUTED —
+#   FAIL iff >=1 blocker — never judged by the model. Fails closed when the review produced
+#   nothing. Honors the `bug-bot:override` label (logged escape hatch; reason -> docs/decisions/).
+#
+# Invariants (this is a gate file — STANDARDS.md HYG-04):
+# - Job name `bug-bot` is the required-check context. Do not rename.
+# - NO `paths:` filters while this is a required check.
+# - The rubric and prompt are materialized from the BASE branch, never the PR checkout — a PR
+#   must not be able to weaken the rules it is judged by.
+# - Tool allowlist is read-only + inline comments. No Write, no `gh pr comment` (model-controlled
+#   args are an exfiltration channel). The model has zero filesystem write surface.
+
+name: Bug Bot
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+concurrency:
+  group: bug-bot-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: bug-bot-review
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      findings: ${{ steps.claude.outputs.structured_output }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0 # full history for real base...head diffs
+
+      - name: Materialize rubric from base branch
+        # The PR must not be able to weaken the rules (or prompt) it is judged by.
+        # Per-path so a missing file (bootstrap) degrades gracefully.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          mkdir -p "$RUNNER_TEMP/rubric"
+          for p in docs/standards WORKING_AGREEMENTS.md docs/decisions .github/bug-bot-prompt.md; do
+            if git archive "origin/$BASE_REF" "$p" 2>/dev/null | tar -x -C "$RUNNER_TEMP/rubric"; then
+              echo "rubric: $p"
+            else
+              echo "::notice::$p not on origin/$BASE_REF yet (bootstrap run)"
+            fi
+          done
+
+      - name: Large-PR circuit breaker (HYG-01)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          stats=$(gh pr view "$PR_NUMBER" --json files --jq '
+            [.files[] | select(
+              ((.path | test("(^|/)(_generated|generated|dist)/")) or
+               (.path | test("(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock)$"))) | not)]
+            | [length, (map(.additions + .deletions) | add // 0)] | @tsv')
+          files=$(cut -f1 <<<"$stats"); lines=$(cut -f2 <<<"$stats")
+          echo "Reviewable size: $files files, $lines changed lines (generated files + lockfiles excluded)"
+          if [ "$files" -gt 25 ] || [ "$lines" -gt 1500 ]; then
+            echo "::error::HYG-01: PR too large to review ($files files / $lines lines; limits 25 / 1500). Split it — no partial reviews."
+            exit 1
+          fi
+
+      - name: Compose prompt
+        id: prompt
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Prompt comes from the base branch (gate-change protection). The checkout copy is used
+          # only when the file isn't on base yet — i.e. exactly once, on the PR that introduces the bot.
+          PROMPT_FILE="$RUNNER_TEMP/rubric/.github/bug-bot-prompt.md"
+          if [ ! -f "$PROMPT_FILE" ]; then
+            echo "::notice::Using PR-local prompt (bootstrap run only)"
+            PROMPT_FILE=".github/bug-bot-prompt.md"
+          fi
+          {
+            echo "content<<BUGBOT_PROMPT_EOF"
+            echo "REPO: $GITHUB_REPOSITORY"
+            echo "PR NUMBER: $PR_NUMBER"
+            echo "RUBRIC DIR (read rules ONLY from here, never from the checkout): $RUNNER_TEMP/rubric"
+            echo
+            cat "$PROMPT_FILE"
+            echo "BUGBOT_PROMPT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - id: claude
+        uses: anthropics/claude-code-action@1298632ce7736903d02a1435002705aa2a594a6c # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_sticky_comment: true
+          prompt: ${{ steps.prompt.outputs.content }}
+          claude_args: |
+            --model claude-sonnet-5-5
+            --max-turns 50
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --json-schema '{"type":"object","properties":{"verdict":{"type":"string","enum":["PASS","FAIL"]},"reviewed_sha":{"type":"string"},"blockers":{"type":"array","items":{"type":"object","properties":{"rule_id":{"type":"string"},"file":{"type":"string"},"line":{"type":"integer"},"evidence":{"type":"string"}},"required":["rule_id","file","evidence"]}},"warns":{"type":"array","items":{"type":"object","properties":{"rule_id":{"type":"string"},"file":{"type":"string"},"line":{"type":"integer"},"evidence":{"type":"string"}},"required":["rule_id","file","evidence"]}}},"required":["verdict","blockers","warns"]}'
+
+  verdict:
+    name: bug-bot # the required-check context. Do not rename.
+    needs: review
+    if: ${{ always() && !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compute verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          FINDINGS: ${{ needs.review.outputs.findings }}
+          REVIEW_RESULT: ${{ needs.review.result }}
+        run: |
+          # Escape hatch — live label check so a label added after the run counts.
+          if gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels \
+               --jq '.labels[].name' | grep -qx 'bug-bot:override'; then
+            echo "::warning::bug-bot:override label present — verdict forced to PASS. Record the reason in docs/decisions/ (standards waiver rules)."
+            exit 0
+          fi
+
+          # Fail closed: no findings payload = no verdict.
+          if [ -z "$FINDINGS" ]; then
+            echo "::error::Bug Bot produced no verdict (review job: $REVIEW_RESULT). This is an INFRASTRUCTURE issue — re-run the 'bug-bot-review' job. There are no findings to hunt for."
+            exit 1
+          fi
+
+          verdict=$(jq -r '.verdict // "MISSING"' <<<"$FINDINGS")
+          blockers=$(jq '.blockers | length' <<<"$FINDINGS")
+          warns=$(jq '.warns | length' <<<"$FINDINGS")
+          sha=$(jq -r '.reviewed_sha // "unknown"' <<<"$FINDINGS")
+          echo "Bug Bot reviewed $sha — verdict: $verdict, $blockers blocker(s), $warns warn(s)"
+
+          # The gate is computed, not judged: FAIL iff >=1 blocker.
+          if [ "$blockers" -gt 0 ]; then
+            jq -r '.blockers[] | "::error::\(.rule_id) — \(.file)\(if .line then ":" + (.line|tostring) else "" end): \(.evidence)"' <<<"$FINDINGS"
+            echo "::error::$blockers BLOCKER(s). Fix them and push; the bot re-reviews automatically. Description-only fixes: re-run 'bug-bot-review' from the Checks tab."
+            exit 1
+          fi
+          if [ "$verdict" != "PASS" ]; then
+            echo "::error::Model reported '$verdict' with zero blockers — contradiction. Failing closed (bot-defect protocol: re-run once, then human adjudicates)."
+            exit 1
+          fi
+          echo "PASS"
